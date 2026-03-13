@@ -1,7 +1,10 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+import os
+import shutil
+import tempfile
 import logging
 import uuid
 import asyncio
@@ -12,7 +15,8 @@ from scorer import SkillScorer
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-app = FastAPI(title="AI Hands-On Persona Analyzer API")
+# You can choose either title, here we'll use a combined one or the original feature title
+app = FastAPI(title="AI Skill Analyzer API")
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -35,6 +39,10 @@ class AnalyzeRequest(BaseModel):
     resume_pdf_path: Optional[str] = None  # Mocking file upload via path for simplicity in API model
     video_urls: Optional[List[str]] = None
     extra_urls: Optional[List[str]] = None
+
+@app.get("/")
+def read_root():
+    return {"status": "Backend is running!"}
 
 @app.post("/api/analyze")
 async def analyze_profile(request: AnalyzeRequest):
@@ -67,6 +75,61 @@ async def analyze_profile(request: AnalyzeRequest):
     except Exception as e:
         logging.error(f"Error in /api/analyze: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze")
+async def analyze_skills_with_upload(
+    github_username: Optional[str] = Form(None),
+    video_urls: Optional[str] = Form(None), # Comma separated
+    extra_urls: Optional[str] = Form(None), # Comma separated
+    resume: Optional[UploadFile] = File(None)
+):
+    """
+    Triggers the full pipeline and scoring using form data (allows actual PDF file uploads).
+    """
+    try:
+        # 1. Handle File Upload (Resume)
+        resume_path = None
+        if resume:
+            if not resume.filename.endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="Resume must be a PDF file")
+            
+            # Save uploaded file to a temporary location
+            fd, resume_path = tempfile.mkstemp(suffix=".pdf")
+            os.close(fd)
+            with open(resume_path, "wb") as buffer:
+                shutil.copyfileobj(resume.file, buffer)
+            logging.info(f"Saved uploaded resume to {resume_path}")
+
+        # 2. Parse List strings
+        v_urls = [url.strip() for url in video_urls.split(",")] if video_urls else []
+        e_urls = [url.strip() for url in extra_urls.split(",")] if extra_urls else []
+        
+        # 3. Run Pipeline
+        pipeline_data = pipeline.run_pipeline(
+            github_username=github_username,
+            resume_pdf_path=resume_path,
+            video_urls=v_urls,
+            extra_urls=e_urls
+        )
+
+        # 4. Calculate Score
+        score_data = scorer.calculate_score(pipeline_data)
+        
+        return {
+            "status": "success",
+            "raw_data": pipeline_data,
+            "analysis": score_data
+        }
+
+    except Exception as e:
+        logging.error(f"Error during analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    finally:
+        # Cleanup temporary resume file
+        if resume_path and os.path.exists(resume_path):
+            os.remove(resume_path)
+            logging.info(f"Cleaned up temp file {resume_path}")
 
 if __name__ == "__main__":
     import uvicorn

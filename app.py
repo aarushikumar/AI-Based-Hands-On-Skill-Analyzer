@@ -75,7 +75,8 @@ if submitted:
                 payload["video_urls"] = [video_url.strip()]
                 
             try:
-                response = requests.post(API_URL, json=payload, timeout=30)
+                # Render free tier takes ~50s to wake up from sleep
+                response = requests.post(API_URL, json=payload, timeout=120)
                 if response.status_code == 200:
                     data = response.json()
                     

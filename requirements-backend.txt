@@ -1,0 +1,11 @@
+PyGithub==2.6.1
+pdfplumber==0.11.5
+pdfminer.six==20231228
+yt-dlp==2024.3.10
+requests==2.31.0
+python-dotenv==1.0.1
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+httpx

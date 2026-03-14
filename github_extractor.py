@@ -21,10 +21,10 @@ class GitHubExtractor:
         """
         self.token = token or os.getenv("GITHUB_TOKEN")
         if self.token:
-            self.gh = Github(self.token)
+            self.gh = Github(self.token, retry=0, timeout=15)
         else:
             logging.warning("No GitHub token provided. Rate limits will be severely restricted.")
-            self.gh = Github()
+            self.gh = Github(retry=0, timeout=15)
 
     def get_user_data(self, username: str) -> Dict[str, Any]:
         """

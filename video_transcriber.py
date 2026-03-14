@@ -1,10 +1,14 @@
 import os
 import tempfile
 import yt_dlp
-import whisper
 import json
 import logging
 from typing import Dict, Any
+
+try:
+    import whisper
+except ImportError:
+    whisper = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,10 +20,13 @@ class VideoTranscriber:
         :param model_size: 'tiny', 'base', 'small', 'medium', 'large'
                            'base' is a good balance for backend generation without a GPU.
         """
-        logging.info(f"Loading Whisper model '{model_size}'...")
-        # Note: This will download the model weights the first time it's run
-        self.model = whisper.load_model(model_size)
-        logging.info("Whisper model loaded successfully.")
+        if whisper is None:
+            logging.warning("Whisper module not found. Video transcription will be disabled.")
+            self.model = None
+        else:
+            logging.info(f"Loading Whisper model '{model_size}'...")
+            self.model = whisper.load_model(model_size)
+            logging.info("Whisper model loaded successfully.")
 
     def download_audio(self, video_url: str, output_path: str) -> bool:
         """
@@ -80,6 +87,10 @@ class VideoTranscriber:
                 return result
 
             # Transcribe the audio
+            if self.model is None:
+                result["error"] = "Transcription is disabled on this server."
+                return result
+
             try:
                 logging.info(f"Transcribing audio with Whisper...")
                 transcription_result = self.model.transcribe(final_audio_path)
